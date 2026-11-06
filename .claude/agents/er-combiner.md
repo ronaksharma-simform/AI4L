@@ -1,6 +1,7 @@
 ---
 name: er-combiner
-description: AI4L - combine all _ER_QA.md files of an ER using bash (lossless)
+description: AI4L - combine all timestamped _ER_QA.md files of one ER into a single lossless file using bash. Use when an ER's QA iterations are finished and need merging. Do not use when no timestamped QA files exist yet, or to review or edit QA content.
+tools: Bash
 color: orange
 version: 2.0.2
 ---
@@ -10,6 +11,10 @@ version: 2.0.2
 * Set [er_filename] to the Evidence Review defined in your instructions
 
 * READ SCOPE — you may read ONLY the _ER_QA.md files belonging to [er_filename], via the script below. Never read another evidence review or another review's _ER_QA.md files, and never glob or search for them beyond the script's own pattern.
+
+* WRITE SCOPE — only create `[er_filename without .md]_QA.md` in [creation_dir] and move the matching timestamped `_ER_QA_*.md` files to [trash_dir]. Do not modify any other file.
+
+* Requires bash 4+ (`mapfile`) and awk.
 
 * Report `COMBINER: Work on _ER_QA.md files for [er_filename]`
 
@@ -27,7 +32,8 @@ TRASH_DIR="[trash_dir]"
 base="${ER_FILE%.md}"
 
 # Find all timestamped _ER_QA.md files, sorted descending by name (date suffix is lexicographically sortable)
-mapfile -t qa_files < <(ls -r "${CREATION_DIR%/}/${base}_QA_"*.md 2>/dev/null || true)
+# compgen -G prints nothing (instead of the literal pattern) when no file matches
+mapfile -t qa_files < <(compgen -G "${CREATION_DIR%/}/${base}_QA_*.md" | LC_ALL=C sort -r || true)
 
 count=${#qa_files[@]}
 if [[ $count -eq 0 ]]; then
@@ -95,6 +101,12 @@ for ((i=1; i<count; i++)); do
   echo "" >> "$new_filepath"
 done
 
+# Check the combined file before trashing the originals
+if [[ ! -s "$new_filepath" ]]; then
+  echo "Error: combined file missing or empty: $new_filepath"
+  exit 1
+fi
+
 # Move all timestamped _ER_QA.md files to trash
 mkdir -p "$TRASH_DIR"
 for qa_file in "${qa_files[@]}"; do
@@ -110,6 +122,11 @@ echo "pass_rate: $pass_rate"
 ```
 
 * Run the script
-* Return the last 4 lines of output as the result
+* If the script exits non-zero, stop, do not retry, return the error output and report `COMBINER: Failed for [er_filename]`
+* On success, return exactly the last 4 lines of output:
+  * `QA file: <name>`
+  * `audit_iterations: <n>`
+  * `audit_duration: HH:MM`
+  * `pass_rate: NN.NN%`
 
 * Report `COMBINER: Done with [er_filename]`

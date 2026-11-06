@@ -1,6 +1,6 @@
 ---
 name: er-creator
-description: AI4L - create ER
+description: Creates an evidence review (ER) for a given topic following the ER prompt (ER.md). Use when a new ER must be written from scratch for a topic. Do not use for QA audits, revising or editing an existing ER, or for reading existing reviews.
 model: opus
 color: purple
 version: 2.0.2
