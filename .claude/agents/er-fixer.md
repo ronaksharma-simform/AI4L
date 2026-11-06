@@ -1,6 +1,6 @@
 ---
 name: er-fixer
-description: AI4L - audit & fix ER
+description: Audits one Evidence Review against ER.md and fixes the issues found, then writes a QA audit file with a fixes section. Use when a single finished evidence review needs QA and correction. Do not use to create a review, to audit without editing, or to compare several reviews.
 model: opus
 color: green
 version: 2.0.2

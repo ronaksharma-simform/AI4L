@@ -1,10 +1,23 @@
 ---
 name: er
-description: AI4L - Main Skill for Evidence Review Creation and Auditing using @AGENTS
+description: Create, audit, fix, iterate, combine into a QA file, and compare evidence reviews (ERs) for an intervention using the er-creator, er-auditor, er-fixer and er-combiner agents. Use when the user asks to write an evidence review, audit or fix an ER, run repeated audit/fix passes until the pass rate reaches 100%, produce a QA report summary, or compare reviews from different models. Invoked as /er {create|audit|fix|combine|iterate|full|compare}.
+allowed-tools: Read, Write, Edit, Glob, Task, Bash(date:*), Bash(ls:*), Bash(cp:*), Bash(mv:*)
 version: 2.0.2
 ---
 
 # AI4L - Main Skill for Evidence Review Creation and Auditing using @AGENTS
+
+## Configuration
+
+Values come from "Globals for Skills and @Agents" in AGENTS.md (single source of truth); current values:
+
+* [creation_dir] = "creation/" (relative to the project root)
+* [trash_dir] = "creation/trash/"
+* [max_audits] = 20
+* [needed_passes] = 1
+* [er_prompt] = "prompts/ER.md" (section 6.25 defines the short_topic naming)
+
+Required agents: `.claude/agents/er-creator.md`, `er-auditor.md`, `er-fixer.md` and `er-combiner.md`. Read the agent file when its behavior is unclear.
 
 ## General Rules
 
@@ -15,6 +28,10 @@ version: 2.0.2
 
 * All generated results go in [creation_dir] as .md files
 * Do not edit or modify any files outside [creation_dir]
+
+* If an agent errors or returns no [pass_rate] or [filename], report `error: [command] failed` with the agent's message and exit without continuing (see the Obstacle Protocol in AGENTS.md)
+
+* Before each @er-fixer call in `fix` and `iterate`, copy [target_er] to `[target_er].bak` in [creation_dir]. Restore it if the fixer fails; move it to [trash_dir] after a successful run. The `.bak` name does not end in `_ER.md`, so it never matches target resolution or the combiner's glob.
 
 
 * Full lines formatted as `line` comments must be ignored when processing commands.
@@ -95,7 +112,7 @@ version: 2.0.2
 
 ## COMMAND: iterate {er}
 
-`Loops audit/fix cycles up to [max_audits] times until [needed_passes] show 100% pass rate.`
+`Loops er-fixer (which performs both the audit and the fix in each round) up to [max_audits] times until [needed_passes] show 100% pass rate.`
 
 * Resolve [target_er] from [args] (see "Resolving the target ER")
 
@@ -142,6 +159,7 @@ If [consecutive_passes] >= [needed_passes] {
 }
 
 * Execute the "create" command
+* If "create" returns no [filename], report `create failed` and exit
 * Execute the "iterate" command with [filename] returned by "create" as [args]
 
 ## COMMAND: compare {intervention}
@@ -161,4 +179,21 @@ If [consecutive_passes] >= [needed_passes] {
   * Be detailed
   * Take into account the latest "_ER_QA.md" for each.
 
+* Report a short table with one row per ER: ER file, model, latest pass_rate
+
 * Present a clear recommendation of which ER is strongest and why.
+
+## Example
+
+`/er full semaglutide` reports:
+
+```
+create: semaglutide
+filename: semaglutide_2025-01-01_ER.md
+Iteration 1: Pass rate = 92.00% (0/1 consecutive passes needed)
+Iteration 2: Pass rate = 100.00% (1/1 consecutive passes needed)
+QA file: semaglutide_2025-01-01_ER_QA.md
+status: success
+target_er: semaglutide_2025-01-01_ER.md
+iterations: 2
+```
