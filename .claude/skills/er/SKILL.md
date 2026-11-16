@@ -1,17 +1,17 @@
 ---
 name: er
-description: Creates, audits, fixes, combines, iterates and compares evidence reviews (ERs) through the /er create, audit, fix, combine, iterate, full and compare sub-commands. Use when the user asks to write an evidence review for an intervention, audit or fix an existing ER, produce a QA summary, or compare ERs from different models. Triggers - 'evidence review', 'ER', '/er', 'audit ER', 'fix ER', 'ER QA', 'pass rate', 'compare ERs'.
+description: Creates, audits, fixes, combines, iterates and compares evidence reviews (ERs) through the /er create, audit, fix, combine, iterate, full and compare sub-commands. Outputs: ER files, audit files with pass rates, and a final _ER_QA.md summary in creation/. Use when the user asks to write an evidence review for an intervention, audit or fix an existing ER, produce a QA summary, or compare ERs from different models. Triggers - 'evidence review', 'write an ER', '/er', 'audit ER', 'fix ER', 'ER QA', 'QA summary', 'pass rate', 'compare ERs', 'combine audits', 'iterate ER'.
 allowed-tools: Task, Read, Glob, Bash(date:*), Bash(cp:*)
 version: 2.0.2
 ---
 
 # AI4L - Main Skill for Evidence Review Creation and Auditing using @AGENTS
 
-Use this skill for ER work only. Repo-level consistency checks (versions, numbering, configs) belong to `/check`.
+Use this skill for ER work only. Repo-level consistency checks (versions, numbering, configs) belong to `/check`. It needs the AGENTS.md Globals and the four er-* agents.
 
 ## Configuration
 
-The values below are the Globals defined in `AGENTS.md`; they are not repeated here, to avoid drift:
+The values below are the Globals defined in `AGENTS.md` (see it also for the Obstacle Protocol); they are not repeated here, to avoid drift:
 
 * [creation_dir], [tmp_dir], [trash_dir]: working directories (`creation/`, `creation/tmp/`, `creation/trash/`)
 * [max_audits], [needed_passes]: iteration limits for `iterate`
@@ -19,7 +19,7 @@ The values below are the Globals defined in `AGENTS.md`; they are not repeated h
 
 ## Agents
 
-Required agents (see `.claude/agents/`):
+Required agents (open `.claude/agents/` only when changing agent behaviour):
 
 * `er-creator.md` returns `filename: [filename]`
 * `er-auditor.md` returns `audit_filename: [audit_filename]` and `pass_rate: [pass_rate]`
@@ -30,13 +30,15 @@ Required agents (see `.claude/agents/`):
 
 * Parse the user's input to determine which sub-command to execute
 * Set [args] to $ARGUMENTS
+* After starting an agent, wait until it finishes and returns its result
 
 * Note the [start_time] when beginning any command, and report the [time_taken] when done
 
 * All generated results go in [creation_dir] as .md files
 * Do not edit or modify any files outside [creation_dir]
 * If any agent returns an error or no result, report `agent failed: [agent]` and exit without continuing (Obstacle Protocol in `AGENTS.md`).
-* `creation/*` is gitignored, so git cannot undo ER edits. Before `fix` and before the `iterate` loop, back up [target_er]: run `date` for [backup_date] and copy [target_er] from [creation_dir] to [tmp_dir] as `<basename without .md>_backup_[backup_date].md` (not named `*_ER.md`, so it is never picked as the newest ER).
+* `creation/*` is gitignored, so git cannot undo ER edits. Before `fix` and before the `iterate` loop, back up [target_er]: run `date +%Y-%m-%d_%H%M%S` for [backup_date] and copy [target_er] from [creation_dir] to [tmp_dir] as `<basename without .md>_backup_[backup_date].md` (not named `*_ER.md`, so it is never picked as the newest ER). Then verify with Glob that the backup exists in [tmp_dir]; if not, report `backup failed` and exit without running the fixer.
+* To undo a fix, copy the matching `_backup_[backup_date].md` from [tmp_dir] back to [creation_dir] under the original name.
 
 
 * Full lines formatted as `line` comments must be ignored when processing commands.
@@ -44,9 +46,11 @@ Required agents (see `.claude/agents/`):
 
 ## Resolving the target ER
 
+Example: `/er audit vitamin d` lists `vitamin_d_*_ER.md` in [creation_dir] and picks the newest by the date in the filename.
+
 * If no [args] are given, set [target_er] to the newest _ER.md file in [creation_dir]
 * Otherwise, if [args] names an existing _ER.md file in [creation_dir] (with or without the directory), set [target_er] to that file's bare filename, without any directory
-* Otherwise treat [args] as an intervention: list the _ER.md files in [creation_dir] whose filename starts with [args] converted the way 6.25 of [er_prompt] converts short_topic (lowercase, spaces and dashes to underscores, other characters removed), and set [target_er] to the newest of them by the date in the filename
+* Otherwise treat [args] as an intervention: list the _ER.md files in [creation_dir] whose filename starts with [args] converted the way 6.25 of [er_prompt] converts short_topic (lowercase, spaces and dashes to underscores, other characters removed; read `prompts/ER.md` only for this naming), and set [target_er] to the newest of them by the date in the filename
 * If nothing matches, report `No ER found for: [args]` and exit
 
 
@@ -64,7 +68,6 @@ Required agents (see `.claude/agents/`):
 * Report: `create: [topic]`
 
 * @er-creator: `[topic]`
-* Wait until the agent finishes
 
 * Verify that [filename] exists in [creation_dir]; if the agent errored or the file is missing, report `create failed` and exit
 
@@ -80,11 +83,12 @@ Required agents (see `.claude/agents/`):
 * Report: `audit: [target_er]`
 
 * @er-auditor: `[target_er]`
-* Wait until the agent finishes and returns the result
 
 * Report: `target_er: [target_er]`
 * Report: `pass_rate: [pass_rate]`
 * Report: `audit_filename: [audit_filename]`
+
+Example: `/er audit vitamin d` reports `audit: vitamin_d_2026-01-01_Opus_ER.md`, `target_er: vitamin_d_2026-01-01_Opus_ER.md`, `pass_rate: 95.00%`, `audit_filename: vitamin_d_2026-01-01_Opus_ER_QA_2026-01-02_1030.md`.
 
 
 ## COMMAND: fix {er}
@@ -98,11 +102,14 @@ Required agents (see `.claude/agents/`):
 * Back up [target_er] (see General Rules)
 
 * @er-fixer: `[target_er]`
-* Wait until the agent finishes and returns the result
+
+* Verify that [target_er] still exists in [creation_dir]; if not, report `fix failed: [target_er] missing` and exit
 
 * Report: `target_er: [target_er]`
 * Report: `pass_rate: [pass_rate]`
 * Report: `audit_filename: [audit_filename]`
+
+Example: `/er fix vitamin d` reports `fix: vitamin_d_2026-01-01_Opus_ER.md`, `target_er: vitamin_d_2026-01-01_Opus_ER.md`, `pass_rate: 80.00%` (the pre-fix rate), `audit_filename: ...`.
 
 
 ## COMMAND: combine {er}
@@ -114,7 +121,6 @@ Required agents (see `.claude/agents/`):
 * Report: `combine: [target_er]`
 
 * @er-combiner: `[target_er]`
-* Wait until the agent finishes and returns the result
 * Set [new_qa_filename] to the filename the agent returns in its `QA file:` line
 
 * Report `QA file: [new_qa_filename]`
@@ -136,7 +142,7 @@ Initialize {
 Loop while [iteration] < [max_audits] and [consecutive_passes] < [needed_passes]
 {
   * @er-fixer: `[target_er]`
-  * Wait until the agent finishes and returns the result
+  * If the agent errors or returns no result, report `agent failed: er-fixer` and exit without combining
 
   * If the [pass_rate] is 100%, increment [consecutive_passes]; otherwise reset to 0
   * Increment [iteration]
@@ -145,7 +151,6 @@ Loop while [iteration] < [max_audits] and [consecutive_passes] < [needed_passes]
 }
 
 * @er-combiner: `[target_er]`
-* Wait until the agent finishes and returns the result
 * Set [new_qa_filename] to the filename the agent returns in its `QA file:` line
 
 * Report `QA file: [new_qa_filename]`
@@ -153,6 +158,7 @@ Loop while [iteration] < [max_audits] and [consecutive_passes] < [needed_passes]
 If [consecutive_passes] >= [needed_passes] {
   * Return: `status: success`
 } else {
+  * Report: `max_audits reached without pass`
   * Return: `status: failed`
 }
 
@@ -186,9 +192,11 @@ Example: `/er full vitamin d` reports `create: vitamin d`, `filename: vitamin_d_
 
 * Report: `compare: [intervention]`
 
-* Compare all ERs in [creation_dir] with a similar [intervention] in their frontmatter
+* Compare all ERs in [creation_dir] whose frontmatter `intervention:` value matches [intervention] case-insensitively (exact or contained)
   * Compare the quality of the content
   * Be detailed
-  * Take into account the latest "_ER_QA.md" for each.
+  * Take into account the latest QA for each: the newest `<ER basename>_QA.md` (or, if none, the newest dated `<ER basename>_QA_*.md`).
 
 * Present a clear recommendation of which ER is strongest and why.
+
+Example: `/er compare vitamin d` reports `compare: vitamin d`, then a comparison of `vitamin_d_2026-01-01_Opus_ER.md` and `vitamin_d_2026-01-01_Gemini-Flash_ER.md` with their QA pass rates and a recommendation.

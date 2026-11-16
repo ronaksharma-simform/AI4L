@@ -10,9 +10,11 @@ version: 2.0.2
 
 * Set [er_filename] to the Evidence Review defined in your instructions
 
-* Do not edit, summarize or rewrite QA content yourself; only run the script and return its output.
+* This agent only merges finished dated QA files. The audits are written by er-auditor and er-fixer and the ER by er-creator; none of that is done here.
 
-* Requires bash 4+ (mapfile), awk and ls; run on Linux or a system with a recent bash.
+* Do not edit, summarize or rewrite QA content yourself; only run the script and return its output. The merge is lossless: the newest audit is kept in full and the Issues and Fixes sections of older audits are appended, so no finding is dropped.
+
+* [er_filename] is the caller's argument; [creation_dir] and [trash_dir] are the Globals in AGENTS.md.
 
 * READ SCOPE — you may read ONLY the _ER_QA.md files belonging to [er_filename], via the script below. Never read another evidence review or another review's _ER_QA.md files, and never glob or search for them beyond the script's own pattern.
 
@@ -23,15 +25,15 @@ Run this bash script (substituting [er_filename], [creation_dir], and [trash_dir
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
+if (( BASH_VERSINFO[0] < 4 )); then echo "Error: bash 4+ required"; exit 1; fi
 
 ER_FILE="[er_filename]"
 CREATION_DIR="[creation_dir]"
 TRASH_DIR="[trash_dir]"
 
-# Derive base name by stripping the .md extension (keeps the _ER suffix)
 base="${ER_FILE%.md}"
 
-# Find all timestamped _ER_QA.md files, sorted descending by name (date suffix is lexicographically sortable)
+# Dated QA files, newest first (the date suffix sorts lexicographically)
 mapfile -t qa_files < <(ls -r "${CREATION_DIR%/}/${base}_QA_"*.md 2>/dev/null || true)
 
 count=${#qa_files[@]}
@@ -43,7 +45,7 @@ fi
 echo "Found $count _ER_QA.md file(s):"
 for f in "${qa_files[@]}"; do echo "  $f"; done
 
-# Sum audit_duration (HH:MM) across all _ER_QA.md files
+# Sum audit_duration (HH:MM) over all files
 total_min=0
 for f in "${qa_files[@]}"; do
   d=$(awk '/^audit_duration:/{sub(/^audit_duration:[[:space:]]*/,""); gsub(/[[:space:]"]/,""); print; exit}' "$f")
@@ -53,18 +55,15 @@ for f in "${qa_files[@]}"; do
 done
 audit_duration=$(printf '%02d:%02d' $((total_min / 60)) $((total_min % 60)))
 
-# Latest is first after reverse sort
 latest="${qa_files[0]}"
 
-# New filename: base already ends in _ER, so this yields ..._ER_QA.md (no date suffix)
 new_filename="${base}_QA.md"
 new_filepath="${CREATION_DIR%/}/${new_filename}"
 
-# Copy the latest _ER_QA.md file verbatim as the base
 cp "$latest" "$new_filepath"
 echo "Base: $latest -> $new_filepath"
 
-# Update frontmatter: set audit_filename, audit_iterations, audit_duration
+# Set audit_filename, audit_iterations and audit_duration in the frontmatter
 awk -v fn="$new_filename" -v itr="$count" -v dur="$audit_duration" '
   BEGIN { in_fm=0; done_fm=0; found_fn=0; found_itr=0; found_dur=0 }
   /^---/ && !done_fm {
@@ -82,7 +81,7 @@ awk -v fn="$new_filename" -v itr="$count" -v dur="$audit_duration" '
   { print }
 ' "$new_filepath" > "${new_filepath}.tmp" && mv "${new_filepath}.tmp" "$new_filepath"
 
-# Extract pass_rate from summary table and normalize to 2 decimal places
+# pass_rate from the summary table, 2 decimals
 pass_rate=$(awk '/\*\*Pass Rate\*\*/{
   if (match($0, /[0-9]+\.?[0-9]*%/)) {
     raw = substr($0, RSTART, RLENGTH - 1)
@@ -91,17 +90,18 @@ pass_rate=$(awk '/\*\*Pass Rate\*\*/{
   }
 }' "$new_filepath")
 
-# Append Issues+Fixes sections from older files in descending order (skip index 0 = latest)
+# Append Issues and Fixes of older audits (index 0 is the latest)
 for ((i=1; i<count; i++)); do
   qa_file="${qa_files[$i]}"
   echo "Appending from: $qa_file"
-  # Extract from the first ## Issues line to end of file
   awk '/^## Issues /{found=1} found{print}' "$qa_file" >> "$new_filepath"
   echo "" >> "$new_filepath"
 done
 
-# Move all timestamped _ER_QA.md files to trash
+[[ -s "$new_filepath" ]] || { echo "Error: merged file missing or empty"; exit 1; }
+
 mkdir -p "$TRASH_DIR"
+# Trash the dated files only after the merge is verified
 for qa_file in "${qa_files[@]}"; do
   mv "$qa_file" "$TRASH_DIR/"
   echo "Trashed: $qa_file"

@@ -9,19 +9,19 @@ version: 2.0.2
 
 # AI4L - Agent to Audit Evidence Reviews according to ER.md
 
-This agent only audits: do not modify [evidence_review] or [er_prompt]; only create the audit file. To fix an ER, use er-fixer; to write one, use er-creator. Bash is for `date` and the counting script that [er_prompt] requires.
+This agent only audits: do not modify [evidence_review] or [er_prompt]; only create the audit file. To fix an ER, use er-fixer; to write one, use er-creator. Use Bash only for `date` and the counting script that [er_prompt] requires. Use `mcp__d-browser` and `mcp__d-proxy-1` only to retrieve a URL when `mcp__d-fetch` fails.
 
 ## Inputs
 
 * [evidence_review]: the Evidence Review defined in your instructions (supplied by the caller)
-* [er_prompt], [creation_dir], [tmp_dir]: the Globals in AGENTS.md
+* [er_prompt], [creation_dir], [tmp_dir]: the Globals in AGENTS.md. If AGENTS.md does not define one of them, report the error and stop. The `d-*` MCP servers in `tools` are also required.
 * [audit_date], [audit_filename], [pass_rate]: defined by [er_prompt]; the audit file is `_ER_QA_[audit_date].md` in [creation_dir]
 
 ## Steps
 
 1. Determine and report AUDITOR:
 
-   * Set [audit_ai_fullname] to the model name, version number and variant (if any) as stated in your system prompt or developer instructions, written as "[name] [version]" or "[name] [version] [variant]". [name] is the word or words directly before the version number; if there is more than one, leave out the first (the vendor or model family) (e.g., Claude Opus 5.5 → Opus 5.5, gemini-3.8-flash → Gemini 3.8 Flash, acme-nova-max-2.0 → Nova Max 2.0). Leave out product, effort and pricing names, also when attached by a hyphen (e.g., Codex, Build, high, free, preview), and capitalize every word. Never use a model name or version from memory. If your system prompt or developer instructions name a model without a version number, [audit_ai_fullname] is that name alone, without a version (e.g., "a Grok Build subagent" → Grok). If they name no model at all, set [audit_ai_fullname] to "Unknown"; a name you believe to be yours does not count.
+   * Set [audit_ai_fullname] to "[name] [version]" or "[name] [version] [variant]" of the model named in your system prompt or developer instructions, using the same derivation as the [audit_ai_fullname] global in [er_prompt] (e.g., Claude Opus 5.5 → Opus 5.5, gemini-3.8-flash → Gemini 3.8 Flash). Never use a model name or version from memory. If the model has no version number, use the name alone (e.g., "a Grok Build subagent" → Grok). If no model is named, use "Unknown".
 
    * Set [audit_ai_nickname] to [audit_ai_fullname] without the version number, with all remaining words joined by hyphens (e.g., Opus, Gemini-Flash, Nova-Max). If [audit_ai_fullname] has no version number or is "Unknown", [audit_ai_nickname] equals [audit_ai_fullname].
 
@@ -31,7 +31,7 @@ This agent only audits: do not modify [evidence_review] or [er_prompt]; only cre
 
 2. Read [er_prompt] in chunks of 250 lines, from the top to its end.
 3. Read [evidence_review] in chunks of 250 lines, from the top to its end.
-4. Perform a QA audit on [evidence_review] by following the instructions in [er_prompt]; this creates the audit file in [creation_dir].
+4. Perform a QA audit on [evidence_review] by following the instructions in [er_prompt]; this creates the audit file in [creation_dir]. Audit criteria: apply every checklist item in [er_prompt] in order and mark each 🟢, 🔴 or N/A. Verify every URL with the matching MCP tool chain (AGENTS.md, "MCP Servers") before marking it. [er_prompt] describes the 5-step audit process: table generation, URL verification, audit, counting and documentation.
 5. Take [pass_rate] from the counting step of [er_prompt].
 6. Return the results (see Output).
 
