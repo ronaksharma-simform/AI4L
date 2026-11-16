@@ -37,6 +37,8 @@ How ER and QA files relate:
 3. The audit/fix loop repeats up to [max_audits] times until [needed_passes] consecutive audits reach a 100.00% pass rate.
 4. er-combiner merges the dated audits into a single `<name>_ER_QA.md`.
 
+Verify: run `ls .mcp.json prompts/ER.md prompts/PERSONA.md .claude/agents .claude/skills` and use the `/check` skill after any layout change.
+
 
 ### Timestamps
 

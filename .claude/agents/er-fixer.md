@@ -9,7 +9,7 @@ version: 2.0.2
 
 # AI4L - Agent to Audit & Fix Evidence Reviews according to ER.md
 
-This agent audits and fixes. To write a new ER use er-creator; to audit without editing use er-auditor.
+This agent audits and fixes. To write a new ER use er-creator; to audit without editing use er-auditor. Requires the AGENTS.md Globals and the `d-*` MCP servers in `tools`; if they are unavailable, report `FIXER: ERROR - <reason>` and stop. Use Bash only for `date`, the counting script that [er_prompt] requires, the `sed` cleanup and moving the temporary file to [trash_dir]; never use Bash to read a file. Use `mcp__d-browser` and `mcp__d-proxy-1` only to retrieve a URL when `mcp__d-fetch` fails.
 
 ## Inputs
 
@@ -23,7 +23,7 @@ This agent audits and fixes. To write a new ER use er-creator; to audit without 
 
 * If [er_prompt] or [evidence_review] cannot be read, report `FIXER: ERROR - <reason>` and stop without editing anything.
 
-* Set [audit_ai_fullname] to the model name, version number and variant (if any) as stated in your system prompt or developer instructions, written as "[name] [version]" or "[name] [version] [variant]". [name] is the word or words directly before the version number; if there is more than one, leave out the first (the vendor or model family) (e.g., Claude Opus 5.5 → Opus 5.5, gemini-3.8-flash → Gemini 3.8 Flash, acme-nova-max-2.0 → Nova Max 2.0). Leave out product, effort and pricing names, also when attached by a hyphen (e.g., Codex, Build, high, free, preview), and capitalize every word. Never use a model name or version from memory. If your system prompt or developer instructions name a model without a version number, [audit_ai_fullname] is that name alone, without a version (e.g., "a Grok Build subagent" → Grok). If they name no model at all, set [audit_ai_fullname] to "Unknown"; a name you believe to be yours does not count.
+* Set [audit_ai_fullname] to "[name] [version]" or "[name] [version] [variant]" of the model named in your system prompt or developer instructions, using the same derivation as the [audit_ai_fullname] global in [er_prompt] (e.g., Claude Opus 5.5 → Opus 5.5, gemini-3.8-flash → Gemini 3.8 Flash). Never use a model name or version from memory. If the model has no version number, use the name alone (e.g., "a Grok Build subagent" → Grok). If no model is named, use "Unknown".
 
 * Set [audit_ai_nickname] to [audit_ai_fullname] without the version number, with all remaining words joined by hyphens (e.g., Opus, Gemini-Flash, Nova-Max). If [audit_ai_fullname] has no version number or is "Unknown", [audit_ai_nickname] equals [audit_ai_fullname].
 
@@ -42,6 +42,8 @@ This agent audits and fixes. To write a new ER use er-creator; to audit without 
 * Read [evidence_review] in chunks of 250 lines, from the top to its end
 
 * Perform a QA audit on [evidence_review] by following the instructions in [er_prompt]
+
+* If [pass_rate] is 100%, skip fixing and the fixes log, still run the `sed` cleanup below, and return the two final lines.
 
 * If the [pass_rate] of the audit is not 100% {
 
@@ -77,42 +79,33 @@ This agent audits and fixes. To write a new ER use er-creator; to audit without 
     - Example: `3. **5.5 — PMC link format:** Replaced PMC link for Johnston et al. 2006 with the PubMed format.` (here `3` is the list position, `5.5` is the issue reference — they are different)
 
   **URL Changes**
-    
-    - When a fix adds, removes or replaces a url, what follows the bold `**{item#} — {short label}:**` prefix is, after a blank line and indented to the list item's text column, a machine-parseable record as a single-row headerless table with three pipe-separated fields: `| <MARKER>: <urls> | tried: <tools> | outcome: <why> |`
 
-    - The record row stands alone: no header row, and no `| --- | --- | --- |` after it — a trailing delimiter row stops it from rendering as a table.
+    - When a fix adds, removes or replaces a url, what follows the bold `**{item#} — {short label}:**` prefix is, after a blank line and indented to the list item's text column, a single-row headerless table: `| <MARKER>: <urls> | tried: <tools> | outcome: <why> |`. Add no header row and no `| --- | --- | --- |` row, or it stops rendering as a table. Write one table per fix; prose may follow it at the same indent.
 
-    - Every url in the `<urls>` field is written as an inline markdown link whose link text is the url itself — `[https://example.org/page](https://example.org/page)` — so it renders as a clickable hyperlink. Never leave a bare url; it renders as plain text. When the url itself contains parentheses, wrap the destination in angle brackets: `[https://example.org/a_(b)](<https://example.org/a_(b)>)`.
-
-    The ER's URL table lists only what it still cites, so once a source is dropped or swapped this record is the only evidence it was ever there.
-
-    - One table per fix — never batch several fixes into one entry. Prose may follow the record, at the same indent.
+    - Write every url in `<urls>` as an inline markdown link whose link text is the url itself, `[https://example.org/page](https://example.org/page)`, never bare. If the url contains parentheses, wrap the destination in angle brackets: `[https://example.org/a_(b)](<https://example.org/a_(b)>)`. The ER's URL table lists only what it still cites, so this record is the only evidence a dropped or swapped source was ever there.
 
     The cases are:
 
-    - `LINK REPLACED` — `<urls>` is `<failing-url> -> <new-url>`. Both urls occupy that single field, so a replacement stays three fields like the others.
+    - `LINK REPLACED`: `<urls>` is `<failing-url> -> <new-url>`, both in the single field.
 
-    - `LINK REMOVED` — `<urls>` is the dropped url. Record it even when the removal was obviously correct (dead URL).
+    - `LINK REMOVED`: `<urls>` is the dropped url. Record it even when the removal was obviously correct (dead URL).
 
-    - `LINK ADDED` — `<urls>` is the new url and `tried:` is `—`. This is not a repair and must not be counted as one.
+    - `LINK ADDED`: `<urls>` is the new url and `tried:` is `—`. This is not a repair and must not be counted as one.
 
-    - The short label of the entry describes the fix and must not restate the marker: write `**5.11 — link text named a secondary source:**`, not `**5.11 — LINK REPLACED:**`.
+    - The short label describes the fix and must not restate the marker: write `**5.11 — link text named a secondary source:**`, not `**5.11 — LINK REPLACED:**`.
 
-    - A change that leaves the url untouched is not a reportable url change. Editing only the link text or the annotation is an ordinary fix entry, not recording it as a `LINK REPLACED`.
+    - A change that leaves the url untouched (link text or annotation only) is an ordinary fix entry, not a url change.
 
   * Report `FIXER: Fixes documented. Combining QA audit results and fixes...`
   * Append the content of [temporary_file] to the end of [audit_filename]
   * Move the [temporary_file] to [trash_dir]
 }
 
-* Run: `sed -i 's|</content>||g; s|</invoke>||g' [audit_filename]`
-* This command strips every `</content>` and `</invoke>` token from the [audit_filename] — including ones glued to the next line like `</invoke>## Fixes ...` — which are artifacts from the audit process and should not be present in the final document. (Opus BUG: Opus sometimes appends these stray tool-call tokens to files it writes.)
+* Always run (also at 100%): `sed -i 's|</content>||g; s|</invoke>||g' [audit_filename]`. It strips stray tool-call tokens that Opus sometimes appends to files it writes, including ones glued to the next line like `</invoke>## Fixes ...`.
 
 * CRITICAL: Do not assume a 100% pass rate only because you fixed the issues found in this pass; other issues may still exist that this audit did not detect. Never claim, imply, mention, or add any text about "100%", "post-fix", "now meets all", "effective pass rate 100%", or success after fixing. Report ONLY the exact pre-fix audit pass_rate. Narrative must match the reported number.
 
-* Report `FIXER: Done with [evidence_review]`
-* Report `FIXER: audit_filename: [audit_filename]`
-* Report `FIXER: pass_rate: [pass_rate]` of the audit (the one before the fixing step)
+* Report `FIXER: Done with [evidence_review]`, then `FIXER: audit_filename: [audit_filename]` and `FIXER: pass_rate: [pass_rate]` (the audit's rate before the fixing step)
 
 Return exactly these two lines, with nothing else:
 
