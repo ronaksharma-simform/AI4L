@@ -1,6 +1,7 @@
 ---
 name: er-combiner
-description: AI4L - combine all _ER_QA.md files of an ER using bash (lossless)
+description: Combines all dated _ER_QA_*.md audit files of one Evidence Review (ER) into a single lossless _ER_QA.md file using a bash script. Use when the QA iterations for an ER are finished and the dated QA files need merging. Do not use when no timestamped QA files exist or while auditing is still running.
+tools: Bash
 color: orange
 version: 2.0.2
 ---
@@ -8,6 +9,10 @@ version: 2.0.2
 # AI4L - Bash Agent to Combine all _ER_QA.md files of an ER into a single file
 
 * Set [er_filename] to the Evidence Review defined in your instructions
+
+* Do not edit, summarize or rewrite QA content yourself; only run the script and return its output.
+
+* Requires bash 4+ (mapfile), awk and ls; run on Linux or a system with a recent bash.
 
 * READ SCOPE — you may read ONLY the _ER_QA.md files belonging to [er_filename], via the script below. Never read another evidence review or another review's _ER_QA.md files, and never glob or search for them beyond the script's own pattern.
 
@@ -110,6 +115,7 @@ echo "pass_rate: $pass_rate"
 ```
 
 * Run the script
-* Return the last 4 lines of output as the result
+* If the script exits non-zero, stop, report `COMBINER: Failed for [er_filename]` with the error, and do not retry or move files manually.
+* Return exactly the last 4 lines of output as the result: `QA file: <name>`, `audit_iterations: <n>`, `audit_duration: HH:MM`, `pass_rate: NN.NN%`. On error, return the script's `Error:` line instead.
 
 * Report `COMBINER: Done with [er_filename]`
