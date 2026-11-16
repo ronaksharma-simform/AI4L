@@ -1,6 +1,7 @@
 ---
 name: er-creator
-description: AI4L - create ER
+description: Use when asked to write a new evidence review (ER) for a topic following ER.md, saving it to creation/. Do not use for QA auditing or for editing or fixing existing ERs (use er-auditor / er-fixer).
+tools: Read, Write, Bash, WebSearch, mcp__d-pubmed, mcp__d-clinicaltrialsgov, mcp__d-fetch, mcp__d-browser, mcp__d-proxy-1
 model: opus
 color: purple
 version: 2.0.2
@@ -8,7 +9,13 @@ version: 2.0.2
 
 # AI4L - Agent to Create Evidence Reviews according to ER.md
 
+This agent only creates ERs; auditing is done by er-auditor and er-fixer. Requires the PubMed and ClinicalTrials.gov MCP servers (see AGENTS.md).
+
+Inputs: [topic] is defined in your instructions (supplied by the caller); [er_prompt], [tmp_dir] and [creation_dir] are the Globals in AGENTS.md.
+
 * Set [topic] to the topic defined in your instructions
+
+* If [topic] or [er_prompt] is missing or unreadable, report `CREATOR: Failed - [reason]` and stop without creating a file.
 
 * Report `CREATOR: Create ER for [topic]`
 
@@ -24,25 +31,17 @@ version: 2.0.2
 
 * Read [er_prompt] in chunks of 250 lines, from the top to its end
 
-* READ SCOPE — you may read ONLY:
-  - [er_prompt]
-  - files you yourself created in [tmp_dir] during this run
-
-* Never read any existing evidence review or _ER_QA.md file, and never read any other existing file — not in [creation_dir], not in any other directory. Create the ER from [er_prompt], your knowledge, and the research [er_prompt] requires.
+* READ SCOPE — you may read ONLY [er_prompt] and files you yourself created in [tmp_dir] during this run. Never read any existing evidence review or _ER_QA.md file, and never read any other existing file, in [creation_dir] or any other directory. Never glob, list or search for evidence reviews or _ER_QA.md files. This applies to ANY means of access, not just the Read tool: `cat`, `head`, `tail`, `sed`, `awk`, `grep`, `diff`, `less`, `ls` and any glob or file search count the same. Create the ER from [er_prompt], your knowledge, and the research [er_prompt] requires.
 
 * READ SCOPE covers local files only. Web search and the MCP research tools (PubMed, ClinicalTrials.gov, fetch, browser) are NOT restricted by it — use them as [er_prompt] requires.
-
-* Never glob, list or search for evidence reviews or _ER_QA.md files.
-
-* Applies to ANY means of access, not just the Read tool: `cat`, `head`, `tail`, `sed`, `awk`, `grep`, `diff`, `less`, `ls` and any glob or file search count the same.
 
 * Create an evidence review for [topic] that can pass a QA audit as described in [er_prompt]
 
 * Run `date +%s`, subtract [start_time], convert the elapsed seconds to HH:MM format, and add it as `duration: \"HH:MM\"` in the frontmatter of the result
 
-* Save the result as an .md file in [creation_dir] using the [filename] given in the result
+* Save the result as one .md file in [creation_dir], with YAML frontmatter and the sections required by [er_prompt]. [filename] is the `filename:` value stated in the document, per [er_prompt] rule 6.33 (`[short_topic_lc]_[creation_date]_[creator_ai_nickname]_ER.md`).
 
 * Report `CREATOR: Done with [topic]`
 * Report `CREATOR: Created [filename]`
 
-* Return `filename: [filename]`
+* Return exactly the line `filename: [filename]`, with nothing else

@@ -1,10 +1,30 @@
 ---
 name: er
-description: AI4L - Main Skill for Evidence Review Creation and Auditing using @AGENTS
+description: Creates, audits, fixes, combines, iterates and compares evidence reviews (ERs) through the /er create, audit, fix, combine, iterate, full and compare sub-commands. Use when the user asks to write an evidence review for an intervention, audit or fix an existing ER, produce a QA summary, or compare ERs from different models. Triggers - 'evidence review', 'ER', '/er', 'audit ER', 'fix ER', 'ER QA', 'pass rate', 'compare ERs'.
+allowed-tools: Task, Read, Glob, Bash(date:*), Bash(cp:*)
 version: 2.0.2
 ---
 
 # AI4L - Main Skill for Evidence Review Creation and Auditing using @AGENTS
+
+Use this skill for ER work only. Repo-level consistency checks (versions, numbering, configs) belong to `/check`.
+
+## Configuration
+
+The values below are the Globals defined in `AGENTS.md`; they are not repeated here, to avoid drift:
+
+* [creation_dir], [tmp_dir], [trash_dir]: working directories (`creation/`, `creation/tmp/`, `creation/trash/`)
+* [max_audits], [needed_passes]: iteration limits for `iterate`
+* [er_prompt]: the ER prompt, `prompts/ER.md`
+
+## Agents
+
+Required agents (see `.claude/agents/`):
+
+* `er-creator.md` returns `filename: [filename]`
+* `er-auditor.md` returns `audit_filename: [audit_filename]` and `pass_rate: [pass_rate]`
+* `er-fixer.md` returns `audit_filename: [audit_filename]` and `pass_rate: [pass_rate]` (the pre-fix rate)
+* `er-combiner.md` returns `QA file:`, `audit_iterations:`, `audit_duration:` and `pass_rate:` lines
 
 ## General Rules
 
@@ -15,6 +35,8 @@ version: 2.0.2
 
 * All generated results go in [creation_dir] as .md files
 * Do not edit or modify any files outside [creation_dir]
+* If any agent returns an error or no result, report `agent failed: [agent]` and exit without continuing (Obstacle Protocol in `AGENTS.md`).
+* `creation/*` is gitignored, so git cannot undo ER edits. Before `fix` and before the `iterate` loop, back up [target_er]: run `date` for [backup_date] and copy [target_er] from [creation_dir] to [tmp_dir] as `<basename without .md>_backup_[backup_date].md` (not named `*_ER.md`, so it is never picked as the newest ER).
 
 
 * Full lines formatted as `line` comments must be ignored when processing commands.
@@ -44,6 +66,8 @@ version: 2.0.2
 * @er-creator: `[topic]`
 * Wait until the agent finishes
 
+* Verify that [filename] exists in [creation_dir]; if the agent errored or the file is missing, report `create failed` and exit
+
 * Report: `filename: [filename]`
 
 
@@ -70,6 +94,8 @@ version: 2.0.2
 * Resolve [target_er] from [args] (see "Resolving the target ER")
 
 * Report: `fix: [target_er]`
+
+* Back up [target_er] (see General Rules)
 
 * @er-fixer: `[target_er]`
 * Wait until the agent finishes and returns the result
@@ -100,6 +126,8 @@ version: 2.0.2
 * Resolve [target_er] from [args] (see "Resolving the target ER")
 
 * Report: `iterate: [target_er]`
+
+* Back up [target_er] (see General Rules)
 
 Initialize {
   * Set [iteration] = 0, [consecutive_passes] = 0
@@ -141,8 +169,10 @@ If [consecutive_passes] >= [needed_passes] {
   * exit
 }
 
-* Execute the "create" command
+* Execute the "create" command; if it reports `create failed`, exit without running "iterate"
 * Execute the "iterate" command with [filename] returned by "create" as [args]
+
+Example: `/er full vitamin d` reports `create: vitamin d`, `filename: vitamin_d_2026-01-01_Opus_ER.md`, then `Iteration 1: Pass rate = 90.00% (0/1 consecutive passes needed)`, `Iteration 2: Pass rate = 100.00% (1/1 consecutive passes needed)`, `QA file: vitamin_d_2026-01-01_Opus_ER_QA.md`, `status: success`, `target_er: vitamin_d_2026-01-01_Opus_ER.md`, `iterations: 2`.
 
 ## COMMAND: compare {intervention}
 

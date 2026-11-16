@@ -1,14 +1,27 @@
 ---
 name: check
-description: Project Verification & Consistency Checking
+description: Checks that version numbers and badges match the VERSION file, that item and step numbering in prompts/ER.md has no gaps or duplicates, and that MCP configs (.mcp.json, .codex, .grok, Claude settings) and generated /sync output are consistent. Use when the user asks to check, verify or validate the repo, after a version bump, after editing ER.md or the agent files, or when MCP config drift is suspected. Triggers - 'check consistency', 'verify versions', 'version mismatch', 'item numbering', 'MCP config drift', '/check'. Scope - repo-level consistency of docs, versions and configs only; it does not audit ER content (use /er for that).
 version: 2.0.2
 ---
 
 # AI4L - Project Verification & Consistency Checking
 
-Handles consistency checking for all major files in the repo, including version numbers, item numbering, and overall consistency across files
+Checks version numbers, item numbering and config consistency across the repo. It does not audit ER content; use `/er audit` for that.
 
-### [project_files]
+## Steps
+
+1. Read the reference version with `cat VERSION`. If `VERSION` is missing, stop and report it.
+2. Run the version checks.
+3. Run the numbering checks.
+4. Run the environment checks.
+5. Report the findings and ask the user before fixing anything.
+6. After approved fixes, re-run all checks and confirm zero findings.
+
+If a listed file is missing, report it as an inconsistency and continue with the remaining files.
+
+## 1. Version checks
+
+Read only these files ([project_files]):
 
 - `.claude/skills/er/SKILL.md`
 - `.claude/skills/check/SKILL.md`
@@ -36,30 +49,37 @@ Handles consistency checking for all major files in the repo, including version 
 
 - `docs/Examples.md`
 
-## Version
+* Use the version in `VERSION` as the reference. Make sure every target is consistent with it, including the version in badges (e.g. `badge/Version-X.Y.Z`).
+* Some files have no badge, just the version in the text. Make sure those are consistent as well.
+* Find versions and badges with `grep -nEi 'version|badge/' <file>`.
+* If a file has no version, leave it as it is.
 
-* Check all [project_files] version numbers
-* Use the version stated in the `VERSION` file in the project root as a reference.
-* Make sure that all targets are consistent with it, including the version in the badges.
-* Some files do not have badges, just the version in the text. Make sure those are consistent as well.
-* If a file has no version, leave it as it is
+## 2. Numbering checks
 
-## Consistency Checking
+Read only `prompts/ER.md`.
 
-* Check all target files for consistency and completeness
-* Check the numbering of all items and the item count in ER.md
-* Also check numbered step lists (`1.`, `2.`, `3.` …) in ER.md, not just `x.y` items
-* Test each sequence for gaps and duplicates explicitly — a gap paired with a duplicate passes a count/min/max test
+* Check the numbering of all items and the item count.
+* Also check numbered step lists (`1.`, `2.`, `3.` …), not just `x.y` items.
+* Test each sequence for gaps and duplicates explicitly; a gap paired with a duplicate passes a count/min/max test.
 
-## Environment Configs
+## 3. Environment checks
+
+Read only `.mcp.json`, `.codex/config.toml`, `.grok/config.toml`, `.claude/settings.json`, `.public/.claude/settings.json` (where present) and `AGENTS.md` (for the servers it prescribes).
 
 `.mcp.json` is the source for MCP servers; `.codex/config.toml`, `.grok/config.toml` and the Claude settings files are hand-maintained. The servers in scope are those AGENTS.md prescribes for the agents; other servers in `.mcp.json` are out of scope.
 
-* For each server in scope, compare command and args in `.codex/config.toml` and `.grok/config.toml` with `.mcp.json`; report a server missing from a TOML and any argument that differs
-* Compare the `mcp__*` entries in the allow lists of `.claude/settings.json` and, where present, `.public/.claude/settings.json` with the servers in scope; report a prescribed server that is not allowed
-* Run `/sync` into a temporary directory and diff against the committed generated files; report any drift
+* For each server in scope, compare command and args in `.codex/config.toml` and `.grok/config.toml` with `.mcp.json`; report a server missing from a TOML and any argument that differs.
+* Compare the `mcp__*` entries in the allow lists of `.claude/settings.json` and, where present, `.public/.claude/settings.json` with the servers in scope; report a prescribed server that is not allowed.
+* Drift check: `tmp=$(mktemp -d)`, run `/sync` into it, then `diff -r "$tmp" <committed generated path>` and report any drift. If `/sync` is unavailable or fails, report the error and skip the drift check.
 
-# Reporting
+## Reporting and fixing
 
 * If there are any inconsistencies, report them and ask the user if you should fix them.
+* Only edit the files and lines listed in the report, and only after approval. Make sure the working tree is committed or stashed first, so `git diff` / `git checkout` can undo the changes.
 * Report what was fixed (if anything).
+
+Example report:
+
+* README.md: badge version 2.0.1 != VERSION 2.0.2
+* prompts/ER.md: step list 3 missing, 5 duplicated
+* .grok/config.toml: server 'd-fetch' missing
