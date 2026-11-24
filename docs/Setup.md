@@ -1,0 +1,1 @@
+Clone the AI4L repository and, if you want the optional `d-proxy-1` server, add `BRIGHTDATA_API_TOKEN` to `.env`. Start your AI coding agent in the repository root so it loads `AGENTS.md` and `.mcp.json`.
