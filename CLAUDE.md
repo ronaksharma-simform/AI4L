@@ -29,3 +29,7 @@ There is no build, test or lint step. The entry points are skills:
 * After editing `.claude/agents/` or `.claude/skills/`, run `/check` to confirm versions, item numbering and MCP config are consistent. `/check` does not regenerate the copies.
 * Take timestamps from `date` in the shell, never from the model's clock.
 * The built-in `WebFetch` tool is denied in `.claude/settings.json`; use the MCP verification chain in AGENTS.md.
+
+## Pex rule test (root)
+
+Every new file you create must contain the exact text `RULE-ROOT-AI4L-7K2` on its first line, inside a comment that suits the file type.
